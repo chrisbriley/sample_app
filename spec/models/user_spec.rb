@@ -18,9 +18,35 @@ describe User do
   it { should respond_to(:remember_token) }
   it { should respond_to(:microposts) }
   it { should respond_to(:feed) }
-  
+  it { should respond_to(:relationships) }
+  it { should respond_to(:followed_users) }
+  it { should respond_to(:following?) }
+  it { should respond_to(:follow!) }
+  it { should respond_to(:reverse_relationships) }
+
   it { should be_valid }
   it { should_not be_admin }
+
+  describe "following" do
+    let(:other_user) { FactoryGirl.create(:user) }
+    before do
+      @user.save
+      @user.follow!(other_user)
+    end
+
+    it { should be_following(other_user) }
+    its(:followed_users) { should include(other_user) }
+
+    describe "followed user" do
+      subject { other_user }
+      its(:followers) { should include(@user) }
+    end
+
+    describe "and unfollowing" do
+      before { @user.unfollow!(other_user) }
+      its(:followed_users) { should_not include(other_user) }
+    end
+  end
 
   describe "micropost associations" do
 
@@ -35,17 +61,29 @@ describe User do
     it "should have the right microposts in the right order" do
       expect(@user.microposts.to_a).to eq [newer_micropost, older_micropost]
     end
-    
+
     describe "status" do
       let(:unfollowed_post) do
         FactoryGirl.create(:micropost, user: FactoryGirl.create(:user))
+      end
+      let(:followed_user) { FactoryGirl.create(:user) }
+      let(:followed_post) do
+        FactoryGirl.create(:micropost, user: followed_user)
+      end
+
+      before do
+        @user.follow!(followed_user)
+        3.times { followed_user.microposts.create!(content: "BLAH") }
       end
 
       its(:feed) { should include(older_micropost) }
       its(:feed) { should include(newer_micropost) }
       its(:feed) { should_not include(unfollowed_post) }
+      its(:feed) do
+        followed_user.microposts.each { |m| should include(m) }
+      end
     end
-    
+
     it "should destroy associated microposts" do
       microposts = @user.microposts.to_a
       @user.destroy
@@ -69,17 +107,17 @@ describe User do
     before { @user.name = " " }
     it { should_not be_valid }
   end
-  
+
   describe "when name is too long" do
     before { @user.name = 'a' * 51 }
     it { should_not be_valid }
   end
-  
+
   describe "when email is not present" do
     before { @user.email = " " }
     it { should_not be_valid }
   end
-  
+
   describe "when email format is invalid" do
     it "should be invalid" do
       addresses = %w[user@foo,com user_at_foo.org example.user@foo.
@@ -100,7 +138,7 @@ describe User do
       end
     end
   end
-  
+
   describe "when email address is already taken" do
     before do
       user_with_same_email = @user.dup
@@ -109,7 +147,7 @@ describe User do
 
     it { should_not be_valid }
   end
-  
+
   describe "when password is not present" do
     before do
       @user = User.new(name: "Example User", email: "user@example.com",
@@ -117,7 +155,7 @@ describe User do
     end
     it { should_not be_valid }
   end
-  
+
   describe "when password is too short" do
     before { @user.password = @user.password_confirmation = "a" * 5 }
     it { should be_invalid }
@@ -127,7 +165,7 @@ describe User do
     before { @user.password_confirmation = "mismatch" }
     it { should_not be_valid }
   end
-  
+
   describe "return value of authenticate method" do
     before { @user.save }
     let(:found_user) { User.find_by(email: @user.email) }
@@ -143,10 +181,10 @@ describe User do
       specify { expect(user_for_invalid_password).to be_false }
     end
   end
-  
+
   describe "remember token" do
     before { @user.save }
     its(:remember_token) { should_not be_blank }
   end
-  
+
 end
